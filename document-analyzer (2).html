@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocMind — AI Document Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #0a0a12;
+    --paper: #f5f3ee;
+    --accent1: #ff4d6d;
+    --accent2: #7b5cfa;
+    --accent3: #00c9a7;
+    --accent4: #ffb830;
+    --glass: rgba(255,255,255,0.7);
+    --shadow: 0 8px 40px rgba(10,10,18,0.12);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ANIMATED BACKGROUND */
+  .bg-blobs {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  }
+  .blob {
+    position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.25;
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+  .blob1 { width: 500px; height: 500px; background: var(--accent2); top: -150px; left: -100px; animation-delay: 0s; }
+  .blob2 { width: 400px; height: 400px; background: var(--accent1); top: 40%; right: -120px; animation-delay: -5s; }
+  .blob3 { width: 350px; height: 350px; background: var(--accent3); bottom: -100px; left: 30%; animation-delay: -9s; }
+  .blob4 { width: 250px; height: 250px; background: var(--accent4); top: 20%; left: 50%; animation-delay: -3s; }
+
+  @keyframes drift {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(40px, 30px) scale(1.08); }
+  }
+
+  /* LAYOUT */
+  .shell {
+    position: relative; z-index: 1;
+    max-width: 860px; margin: 0 auto; padding: 0 24px 80px;
+  }
+
+  /* HEADER */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 0;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px;
+    letter-spacing: -0.5px; color: var(--ink);
+  }
+  .logo span { color: var(--accent2); }
+  .badge {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+    padding: 5px 12px; border-radius: 20px;
+    background: var(--ink); color: var(--paper);
+  }
+
+  /* HERO */
+  .hero {
+    text-align: center; padding: 64px 0 48px;
+    animation: fadeUp 0.7s ease both;
+  }
+  .hero-eyebrow {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent2); margin-bottom: 16px;
+  }
+  .hero h1 {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: clamp(36px, 6vw, 64px); line-height: 1.05;
+    letter-spacing: -2px; margin-bottom: 18px;
+  }
+  .hero h1 em { font-style: normal; color: var(--accent1); }
+  .hero p {
+    font-size: 17px; color: #555; font-weight: 300; max-width: 460px; margin: 0 auto;
+  }
+
+  /* DROP ZONE */
+  .drop-card {
+    background: var(--glass);
+    backdrop-filter: blur(20px);
+    border: 2px dashed rgba(123,92,250,0.35);
+    border-radius: 24px;
+    padding: 52px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s;
+    animation: fadeUp 0.7s 0.15s ease both;
+    position: relative; overflow: hidden;
+  }
+  .drop-card:hover, .drop-card.dragging {
+    border-color: var(--accent2);
+    background: rgba(123,92,250,0.07);
+    transform: translateY(-3px);
+  }
+  .drop-icon {
+    width: 64px; height: 64px; margin: 0 auto 18px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent1));
+    border-radius: 18px; display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+  .drop-title {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 20px; margin-bottom: 8px;
+  }
+  .drop-sub { font-size: 14px; color: #888; margin-bottom: 22px; }
+  .drop-btn {
+    display: inline-block; font-family: 'Syne', sans-serif; font-weight: 700;
+    font-size: 14px; letter-spacing: 0.3px;
+    padding: 12px 28px; border-radius: 12px;
+    background: var(--ink); color: var(--paper);
+    border: none; cursor: pointer; transition: transform 0.15s, background 0.15s;
+  }
+  .drop-btn:hover { background: var(--accent2); transform: scale(1.03); }
+  #file-input { display: none; }
+  .file-types { font-size: 12px; color: #aaa; margin-top: 14px; letter-spacing: 0.3px; }
+
+  /* WEBHOOK URL INPUT */
+  .webhook-row {
+    display: flex; gap: 10px; margin-top: 16px; align-items: center;
+    animation: fadeUp 0.7s 0.25s ease both;
+  }
+  .webhook-label {
+    font-size: 12px; font-weight: 500; color: #888; white-space: nowrap;
+    letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .webhook-input {
+    flex: 1; padding: 11px 16px; border-radius: 10px;
+    border: 1.5px solid rgba(123,92,250,0.2);
+    background: rgba(255,255,255,0.8); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; color: var(--ink); outline: none;
+    transition: border-color 0.2s;
+  }
+  .webhook-input:focus { border-color: var(--accent2); }
+  .webhook-input::placeholder { color: #bbb; }
+
+  /* FILE PREVIEW CHIP */
+  .file-chip {
+    display: none; align-items: center; gap: 12px;
+    background: white; border: 1.5px solid rgba(123,92,250,0.2);
+    border-radius: 14px; padding: 12px 18px; margin-top: 14px;
+    animation: fadeUp 0.3s ease both;
+  }
+  .file-chip.visible { display: flex; }
+  .chip-icon { font-size: 22px; }
+  .chip-info { flex: 1; }
+  .chip-name { font-weight: 500; font-size: 14px; }
+  .chip-size { font-size: 12px; color: #aaa; }
+  .chip-remove {
+    width: 28px; height: 28px; border-radius: 50%; background: #f0eee8;
+    border: none; cursor: pointer; font-size: 14px; display: flex;
+    align-items: center; justify-content: center; color: #888;
+    transition: background 0.15s;
+  }
+  .chip-remove:hover { background: #ffd6de; color: var(--accent1); }
+
+  /* ANALYZE BUTTON */
+  .analyze-btn {
+    width: 100%; padding: 18px; margin-top: 18px;
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px;
+    letter-spacing: 0.2px;
+    background: linear-gradient(135deg, var(--accent2) 0%, var(--accent1) 100%);
+    color: white; border: none; border-radius: 16px; cursor: pointer;
+    transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s;
+    animation: fadeUp 0.7s 0.3s ease both;
+    box-shadow: 0 8px 30px rgba(123,92,250,0.35);
+  }
+  .analyze-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; box-shadow: none; }
+  .analyze-btn:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 12px 36px rgba(123,92,250,0.45); }
+
+  /* LOADING STATE */
+  .loading-bar-wrap {
+    display: none; margin-top: 18px; animation: fadeUp 0.3s ease both;
+  }
+  .loading-bar-wrap.visible { display: block; }
+  .loading-label {
+    font-size: 13px; color: var(--accent2); font-weight: 500; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(123,92,250,0.2);
+    border-top-color: var(--accent2); border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: inline-block;
+  }
+  .loading-track {
+    height: 4px; background: rgba(123,92,250,0.12); border-radius: 4px; overflow: hidden;
+  }
+  .loading-fill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent1));
+    border-radius: 4px; transition: width 0.4s ease;
+    animation: loadpulse 1.4s ease infinite;
+  }
+  @keyframes loadpulse {
+    0%, 100% { opacity: 1; } 50% { opacity: 0.6; }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* RESULTS */
+  #results {
+    display: none; margin-top: 36px;
+    animation: fadeUp 0.5s ease both;
+  }
+  #results.visible { display: block; }
+
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;
+  }
+  .results-title {
+    font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -0.5px;
+  }
+  .results-meta { font-size: 13px; color: #aaa; }
+
+  .results-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 600px) { .results-grid { grid-template-columns: 1fr; } }
+
+  .result-card {
+    background: white; border-radius: 20px; padding: 22px 24px;
+    border: 1.5px solid rgba(10,10,18,0.07);
+    box-shadow: var(--shadow);
+    animation: fadeUp 0.4s ease both;
+    transition: transform 0.2s;
+  }
+  .result-card:hover { transform: translateY(-2px); }
+  .result-card.full { grid-column: 1 / -1; }
+
+  .card-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+    text-transform: uppercase; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  /* Summary card */
+  .summary-text {
+    font-size: 15px; line-height: 1.7; color: #333; font-weight: 300;
+  }
+
+  /* Key points */
+  .keypoint-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .keypoint-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 14px; line-height: 1.5; color: #333;
+  }
+  .kp-bullet {
+    width: 20px; height: 20px; min-width: 20px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent1));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 800; color: white; margin-top: 2px;
+  }
+
+  /* Keywords */
+  .keywords-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+  .kw-tag {
+    font-size: 13px; font-weight: 500; padding: 6px 14px; border-radius: 20px;
+    border: 1.5px solid; cursor: default;
+    transition: transform 0.15s;
+  }
+  .kw-tag:hover { transform: scale(1.05); }
+  .kw-0 { border-color: var(--accent2); color: var(--accent2); background: rgba(123,92,250,0.07); }
+  .kw-1 { border-color: var(--accent1); color: var(--accent1); background: rgba(255,77,109,0.07); }
+  .kw-2 { border-color: var(--accent3); color: #00a589; background: rgba(0,201,167,0.07); }
+  .kw-3 { border-color: var(--accent4); color: #c88e00; background: rgba(255,184,48,0.07); }
+
+  /* Sentiment */
+  .sentiment-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 30px; font-weight: 600; font-size: 15px;
+    margin-bottom: 10px;
+  }
+  .sentiment-bar {
+    height: 6px; border-radius: 6px; background: #f0eee8; overflow: hidden;
+    margin-top: 14px;
+  }
+  .sentiment-fill {
+    height: 100%; border-radius: 6px;
+    transition: width 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .sentiment-note { font-size: 12px; color: #aaa; margin-top: 8px; }
+
+  /* DOWNLOAD ROW */
+  .download-row {
+    display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap;
+  }
+  .dl-btn {
+    display: flex; align-items: center; gap: 7px;
+    padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    border: 1.5px solid rgba(10,10,18,0.15); background: white; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    color: var(--ink); font-family: 'DM Sans', sans-serif;
+  }
+  .dl-btn:hover { background: var(--ink); color: white; border-color: var(--ink); transform: translateY(-1px); }
+
+  /* ERROR */
+  .error-msg {
+    display: none; align-items: center; gap: 10px;
+    background: #fff1f3; border: 1.5px solid rgba(255,77,109,0.25);
+    border-radius: 12px; padding: 14px 18px; margin-top: 14px;
+    font-size: 14px; color: #cc2244; animation: fadeUp 0.3s ease both;
+  }
+  .error-msg.visible { display: flex; }
+
+  /* RESET */
+  .reset-btn {
+    background: none; border: 1.5px solid rgba(10,10,18,0.15); border-radius: 10px;
+    padding: 8px 16px; font-size: 13px; font-family: 'DM Sans', sans-serif;
+    cursor: pointer; color: #888; transition: border-color 0.15s, color 0.15s;
+  }
+  .reset-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+  /* FOOTER */
+  footer {
+    text-align: center; padding: 32px 0 0;
+    font-size: 12px; color: #bbb; letter-spacing: 0.3px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-blobs">
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+  <div class="blob blob3"></div>
+  <div class="blob blob4"></div>
+</div>
+
+<div class="shell">
+  <header>
+    <div class="logo">Doc<span>Mind</span></div>
+    <div class="badge">AI POWERED</div>
+  </header>
+
+  <div class="hero">
+    <div class="hero-eyebrow">Instant Document Intelligence</div>
+    <h1>Upload. Analyze.<br><em>Understand.</em></h1>
+    <p>Drop any document and get an AI-powered breakdown in seconds — summaries, key points, keywords & sentiment.</p>
+  </div>
+
+  <!-- DROP ZONE -->
+  <div class="drop-card" id="drop-zone">
+    <div class="drop-icon">📄</div>
+    <div class="drop-title">Drag & drop your document</div>
+    <div class="drop-sub">or click to browse from your device</div>
+    <button class="drop-btn" onclick="document.getElementById('file-input').click()">Choose File</button>
+    <input type="file" id="file-input" accept=".pdf,.doc,.docx,.txt">
+    <div class="file-types">Supports PDF · DOCX · TXT · up to 20MB</div>
+  </div>
+
+  <!-- FILE CHIP -->
+  <div class="file-chip" id="file-chip">
+    <div class="chip-icon" id="chip-icon">📄</div>
+    <div class="chip-info">
+      <div class="chip-name" id="chip-name">document.pdf</div>
+      <div class="chip-size" id="chip-size">0 KB</div>
+    </div>
+    <button class="chip-remove" onclick="removeFile()" title="Remove">✕</button>
+  </div>
+
+
+  <input type="hidden" id="webhook-url" value="https://n8ndev.nitco.io/webhook-test/document-analyze" />
+
+  <!-- ANALYZE -->
+  <button class="analyze-btn" id="analyze-btn" disabled onclick="analyze()">
+    ✦ Analyze Document
+  </button>
+
+  <!-- LOADING -->
+  <div class="loading-bar-wrap" id="loading">
+    <div class="loading-label">
+      <span class="spinner"></span>
+      <span id="loading-text">Sending to AI agent…</span>
+    </div>
+    <div class="loading-track">
+      <div class="loading-fill" id="loading-fill"></div>
+    </div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-msg" id="error-msg">
+    <span>⚠</span>
+    <span id="error-text">Something went wrong. Check your webhook URL and try again.</span>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div class="results-header">
+      <div class="results-title">Analysis Results</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="results-meta" id="results-meta"></div>
+        <button class="reset-btn" onclick="resetAll()">↺ New Document</button>
+      </div>
+    </div>
+
+    <div class="results-grid">
+      <!-- Summary -->
+      <div class="result-card full" id="card-summary" style="animation-delay:0.05s">
+        <div class="card-label">
+          <span class="card-dot" style="background:var(--accent2)"></span>
+          Summary
+        </div>
+        <div class="summary-text" id="summary-text"></div>
+      </div>
+
+      <!-- Key Points -->
+      <div class="result-card" id="card-keypoints" style="animation-delay:0.1s">
+        <div class="card-label">
+          <span class="card-dot" style="background:var(--accent1)"></span>
+          Key Points
+        </div>
+        <ul class="keypoint-list" id="keypoints-list"></ul>
+      </div>
+
+      <!-- Sentiment -->
+      <div class="result-card" id="card-sentiment" style="animation-delay:0.15s">
+        <div class="card-label">
+          <span class="card-dot" style="background:var(--accent3)"></span>
+          Sentiment
+        </div>
+        <div id="sentiment-display"></div>
+      </div>
+
+      <!-- Keywords -->
+      <div class="result-card full" id="card-keywords" style="animation-delay:0.2s">
+        <div class="card-label">
+          <span class="card-dot" style="background:var(--accent4)"></span>
+          Keywords
+        </div>
+        <div class="keywords-wrap" id="keywords-wrap"></div>
+      </div>
+    </div>
+
+    <!-- Download -->
+    <div class="download-row">
+      <button class="dl-btn" onclick="downloadJSON()">⬇ Download JSON</button>
+      <button class="dl-btn" onclick="copyJSON()">⎘ Copy to Clipboard</button>
+    </div>
+  </div>
+
+  <footer>Built with n8n + Groq · DocMind AI</footer>
+</div>
+
+<script>
+  let selectedFile = null;
+  let analysisResult = null;
+
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const fileChip = document.getElementById('file-chip');
+  const analyzeBtn = document.getElementById('analyze-btn');
+
+  // Drag & drop
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragging'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('dragging');
+    if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+  dropZone.addEventListener('click', (e) => {
+    if (e.target !== dropZone && !e.target.classList.contains('drop-icon') &&
+        !e.target.classList.contains('drop-title') && !e.target.classList.contains('drop-sub') &&
+        !e.target.classList.contains('file-types')) return;
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+  function setFile(f) {
+    selectedFile = f;
+    document.getElementById('chip-name').textContent = f.name;
+    document.getElementById('chip-size').textContent = formatSize(f.size);
+    document.getElementById('chip-icon').textContent = f.name.endsWith('.pdf') ? '📕' : f.name.endsWith('.txt') ? '📝' : '📄';
+    fileChip.classList.add('visible');
+    checkReady();
+  }
+
+  function removeFile() {
+    selectedFile = null; fileInput.value = '';
+    fileChip.classList.remove('visible');
+    checkReady();
+  }
+
+  function checkReady() {
+    analyzeBtn.disabled = !selectedFile;
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  const loadingSteps = [
+    'Sending to AI agent…', 'Extracting document text…',
+    'Running Groq analysis…', 'Parsing structured output…', 'Almost done…'
+  ];
+
+  async function analyze() {
+    const webhookUrl = document.getElementById('webhook-url').value.trim();
+    if (!webhookUrl) { showError('Please enter your n8n webhook URL first.'); return; }
+    if (!selectedFile) return;
+
+    hideError();
+    setLoading(true);
+    analyzeBtn.disabled = true;
+
+    let step = 0;
+    const stepInterval = setInterval(() => {
+      step = Math.min(step + 1, loadingSteps.length - 1);
+      document.getElementById('loading-text').textContent = loadingSteps[step];
+      document.getElementById('loading-fill').style.width = (20 + step * 18) + '%';
+    }, 1800);
+
+    try {
+      const arrayBuffer = await selectedFile.arrayBuffer();
+
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': selectedFile.type || 'application/octet-stream',
+          'Content-Disposition': 'attachment; filename="' + selectedFile.name + '"'
+        },
+        body: arrayBuffer
+      });
+      if (!res.ok) throw new Error('Webhook returned ' + res.status);
+
+      const raw = await res.json();
+      clearInterval(stepInterval);
+      document.getElementById('loading-fill').style.width = '100%';
+
+      setTimeout(() => {
+        setLoading(false);
+        renderResults(raw);
+      }, 400);
+
+    } catch (err) {
+      clearInterval(stepInterval);
+      setLoading(false);
+      analyzeBtn.disabled = false;
+      let msg = err.message;
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+        msg = 'CORS error: In n8n, open your Webhook node → Settings → enable "Allow Cross-Origin Requests (CORS)".';
+      }
+      showError(msg);
+    }
+  }
+
+  function renderResults(raw) {
+    // Accept raw JSON or wrapped object
+    let data = raw;
+    if (Array.isArray(raw)) data = raw[0];
+    if (data && data.output) data = data.output;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch(e) {}
+    }
+
+    analysisResult = data;
+
+    // Summary
+    document.getElementById('summary-text').textContent = data.summary || 'No summary available.';
+
+    // Key Points
+    const kpList = document.getElementById('keypoints-list');
+    kpList.innerHTML = '';
+    const points = data.key_points || data['key Points'] || data.keyPoints || data['Key Points'] || [];
+    if (points.length === 0) {
+      kpList.innerHTML = '<li style="color:#aaa;font-size:14px;">No key points found.</li>';
+    } else {
+      points.forEach((pt, i) => {
+        kpList.innerHTML += `<li class="keypoint-item"><span class="kp-bullet">${i+1}</span><span>${pt}</span></li>`;
+      });
+    }
+
+    // Keywords
+    const kwWrap = document.getElementById('keywords-wrap');
+    kwWrap.innerHTML = '';
+    const keywords = data.keywords || [];
+    keywords.forEach((kw, i) => {
+      kwWrap.innerHTML += `<span class="kw-tag kw-${i % 4}">${kw}</span>`;
+    });
+    if (!keywords.length) kwWrap.innerHTML = '<span style="color:#aaa;font-size:14px;">No keywords extracted.</span>';
+
+    // Sentiment
+    const sent = (data.sentiment || 'Neutral').toLowerCase();
+    const sentConfig = {
+      positive:  { emoji: '😊', color: '#00c9a7', bg: 'rgba(0,201,167,0.1)', bar: 85, label: 'Positive' },
+      negative:  { emoji: '😟', color: '#ff4d6d', bg: 'rgba(255,77,109,0.1)', bar: 20, label: 'Negative' },
+      neutral:   { emoji: '😐', color: '#7b5cfa', bg: 'rgba(123,92,250,0.1)', bar: 50, label: 'Neutral' },
+      mixed:     { emoji: '🤔', color: '#ffb830', bg: 'rgba(255,184,48,0.1)', bar: 55, label: 'Mixed' },
+    };
+    const cfg = sentConfig[sent] || sentConfig.neutral;
+    document.getElementById('sentiment-display').innerHTML = `
+      <div class="sentiment-pill" style="background:${cfg.bg};color:${cfg.color}">
+        ${cfg.emoji} ${cfg.label}
+      </div>
+      <div style="font-size:13px;color:#888;margin-top:4px;">Document tone detected by AI</div>
+      <div class="sentiment-bar">
+        <div class="sentiment-fill" id="sent-fill" style="background:${cfg.color};width:0%"></div>
+      </div>
+      <div class="sentiment-note">Confidence score</div>
+    `;
+    setTimeout(() => {
+      const fill = document.getElementById('sent-fill');
+      if (fill) fill.style.width = cfg.bar + '%';
+    }, 300);
+
+    // Meta
+    const now = new Date();
+    document.getElementById('results-meta').textContent =
+      now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    document.getElementById('results').classList.add('visible');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function setLoading(show) {
+    const el = document.getElementById('loading');
+    el.classList.toggle('visible', show);
+    if (show) {
+      document.getElementById('loading-text').textContent = loadingSteps[0];
+      document.getElementById('loading-fill').style.width = '10%';
+    }
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    document.getElementById('error-text').textContent = msg;
+    el.classList.add('visible');
+  }
+  function hideError() { document.getElementById('error-msg').classList.remove('visible'); }
+
+  function resetAll() {
+    removeFile(); hideError(); setLoading(false);
+    document.getElementById('results').classList.remove('visible');
+    document.getElementById('loading-fill').style.width = '0%';
+    analyzeBtn.disabled = true; analysisResult = null;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function downloadJSON() {
+    if (!analysisResult) return;
+    const blob = new Blob([JSON.stringify(analysisResult, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'docmind-analysis.json'; a.click();
+  }
+
+  async function copyJSON() {
+    if (!analysisResult) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(analysisResult, null, 2));
+      const btn = event.target;
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => btn.textContent = '⎘ Copy to Clipboard', 2000);
+    } catch(e) {}
+  }
+</script>
+</body>
+</html>
